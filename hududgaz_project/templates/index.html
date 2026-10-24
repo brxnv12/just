@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="uz" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Hududgaz Mini App</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  body{background:#020617;color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       padding-bottom:calc(5rem + env(safe-area-inset-bottom))}
+  .glass-card{background:rgba(30,41,59,.65);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.08)}
+  .nav-btn{color:#94a3b8;border-top:2px solid transparent;flex:1}
+  .nav-btn.active-tab{color:#10b981;border-top-color:#10b981}
+  .inp{width:100%;background:rgba(15,23,42,.6);border:1px solid rgba(51,65,85,.6);border-radius:.75rem;padding:.75rem;font-size:.8rem;color:#f1f5f9;outline:none}
+  .inp:focus{border-color:#10b981}
+  select.inp option{background:#0f172a}
+  .btn{background:#10b981;color:#022c22;font-weight:700;border-radius:.75rem;padding:.75rem 1rem;font-size:.8rem;width:100%}
+  .btn:disabled{opacity:.5}
+  .btn2{background:#1e293b;color:#e2e8f0;font-weight:600;border-radius:.75rem;padding:.75rem 1rem;font-size:.75rem}
+  #map{height:200px;border-radius:.75rem;z-index:1}
+  .bar{background:linear-gradient(to top,#059669,#34d399);border-radius:6px 6px 0 0;min-height:3px}
+  #toast{position:fixed;left:50%;top:calc(.75rem + env(safe-area-inset-top));transform:translateX(-50%);z-index:100;max-width:90%}
+</style>
+</head>
+<body class="select-none">
+
+<div id="toast" class="hidden px-4 py-2 rounded-xl text-xs font-medium shadow-lg"></div>
+
+<header class="p-4 flex justify-between items-center glass-card sticky top-0 z-50">
+  <div class="flex items-center space-x-3">
+    <div class="w-10 h-10 rounded-2xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 border border-emerald-500/30">
+      <i class="fa-solid fa-fire-flame-curved"></i></div>
+    <div>
+      <h1 class="text-sm font-bold text-slate-100">Hududgaz Nazorat</h1>
+      <p id="user-display" class="text-[11px] text-slate-400">Yuklanmoqda...</p>
+    </div>
+  </div>
+  <button onclick="switchTab('profile')" class="text-slate-400"><i class="fa-solid fa-gear text-lg"></i></button>
+</header>
+
+<main class="p-4 max-w-lg mx-auto">
+
+  <!-- ASOSIY -->
+  <section id="tab-dashboard" class="tab-content space-y-4">
+    <div id="acc-switch-wrap" class="hidden">
+      <select id="acc-switch" class="inp" onchange="selectAccount(this.value)"></select>
+    </div>
+
+    <div class="glass-card rounded-3xl p-6 relative overflow-hidden">
+      <div class="absolute -right-8 -top-8 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl"></div>
+      <div class="flex justify-between items-start mb-2">
+        <span class="text-xs text-slate-400">Shaxsiy hisob: <b class="text-slate-200 font-mono" id="account-num">---</b></span>
+        <span id="network-badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">—</span>
+      </div>
+      <div class="text-xs text-slate-400">Joriy balans</div>
+      <div class="text-3xl font-extrabold my-1" id="balance-wrap">
+        <span id="account-balance">0</span> <span class="text-sm font-normal text-slate-400">so'm</span>
+      </div>
+      <p class="text-[11px] text-slate-400 mb-5" id="account-address">Manzil ko'rsatilmagan</p>
+      <button class="btn flex items-center justify-center space-x-2" onclick="openTopup()">
+        <i class="fa-solid fa-wallet"></i><span>Hisobni to'ldirish</span></button>
+    </div>
+
+    <div class="grid grid-cols-4 gap-2">
+      <button onclick="switchTab('meters')" class="glass-card p-3 rounded-2xl flex flex-col items-center space-y-1"><i class="fa-solid fa-gauge-high text-emerald-400 text-lg"></i><span class="text-[10px] text-slate-300">Ko'rsatkich</span></button>
+      <button onclick="switchTab('requests')" class="glass-card p-3 rounded-2xl flex flex-col items-center space-y-1"><i class="fa-solid fa-file-pen text-emerald-400 text-lg"></i><span class="text-[10px] text-slate-300">Murojaat</span></button>
+      <button onclick="document.getElementById('tx-box').scrollIntoView({behavior:'smooth'})" class="glass-card p-3 rounded-2xl flex flex-col items-center space-y-1"><i class="fa-solid fa-receipt text-emerald-400 text-lg"></i><span class="text-[10px] text-slate-300">To'lovlar</span></button>
+      <button onclick="switchTab('chat')" class="glass-card p-3 rounded-2xl flex flex-col items-center space-y-1"><i class="fa-solid fa-robot text-emerald-400 text-lg"></i><span class="text-[10px] text-slate-300">AI yordam</span></button>
+    </div>
+
+    <div class="glass-card rounded-3xl p-5">
+      <h3 class="text-sm font-bold text-slate-200 mb-3">Oylik sarf</h3>
+      <div id="chart" class="flex items-end justify-between h-28 gap-2"></div>
+      <p id="chart-empty" class="text-[11px] text-slate-500 hidden">Hali ma'lumot yo'q. Ko'rsatkich kiriting.</p>
+    </div>
+
+    <div class="glass-card rounded-3xl p-5" id="tx-box">
+      <h3 class="text-sm font-bold text-slate-200 mb-3">Oxirgi operatsiyalar</h3>
+      <div id="tx-list" class="space-y-2 text-xs"></div>
+    </div>
+  </section>
+
+  <!-- HISOBLAGICH -->
+  <section id="tab-meters" class="tab-content hidden space-y-4">
+    <div class="glass-card p-5 rounded-3xl">
+      <h3 class="text-sm font-bold text-slate-200 mb-1">Yangi ko'rsatkich kiritish</h3>
+      <p id="last-reading" class="text-[11px] text-slate-400 mb-3"></p>
+      <div class="space-y-3">
+        <input id="reading-input" type="number" inputmode="decimal" step="0.01" placeholder="Joriy ko'rsatkich" class="inp">
+        <input id="reading-photo" type="file" accept="image/*" capture="environment" class="hidden" onchange="photoChosen('reading-photo','reading-photo-name')">
+        <div class="flex items-center space-x-2">
+          <button class="btn2 w-1/2 flex items-center justify-center space-x-2" onclick="document.getElementById('reading-photo').click()">
+            <i class="fa-solid fa-camera"></i><span>Rasmga olish</span></button>
+          <button id="reading-send" class="btn w-1/2" onclick="submitReading()">Jo'natish</button>
+        </div>
+        <p id="reading-photo-name" class="text-[11px] text-emerald-400"></p>
+      </div>
+    </div>
+    <div class="glass-card p-5 rounded-3xl">
+      <h3 class="text-sm font-bold text-slate-200 mb-3">Oxirgi ko'rsatkichlar</h3>
+      <div id="reading-list" class="space-y-2 text-xs"></div>
+    </div>
+  </section>
+
+  <!-- ARIZALAR -->
+  <section id="tab-requests" class="tab-content hidden space-y-4">
+    <div class="glass-card p-5 rounded-3xl space-y-3">
+      <h3 class="text-sm font-bold text-slate-200">Operatorga ariza yuborish</h3>
+      <select id="appeal-category" class="inp">
+        <option>Hisoblagichni qiyoslash (Poverka)</option>
+        <option>Plomba o'rnatish / Muammo</option>
+        <option>Ma'lumotlarni o'zgartirish</option>
+        <option>Qarzdorlik bo'yicha e'tiroz</option>
+        <option>Boshqa</option>
+      </select>
+      <textarea id="appeal-text" rows="4" placeholder="Batafsil yozing..." class="inp"></textarea>
+      <input id="appeal-photo" type="file" accept="image/*" class="hidden" onchange="photoChosen('appeal-photo','appeal-photo-name')">
+      <div class="flex items-center space-x-2">
+        <button class="btn2 w-1/2" onclick="document.getElementById('appeal-photo').click()"><i class="fa-solid fa-paperclip"></i> Rasm qo'shish</button>
+        <button id="appeal-send" class="btn w-1/2" onclick="submitAppeal()">Yuborish</button>
+      </div>
+      <p id="appeal-photo-name" class="text-[11px] text-emerald-400"></p>
+    </div>
+    <div class="glass-card p-5 rounded-3xl">
+      <h3 class="text-sm font-bold text-slate-200 mb-3">Murojaatlarim</h3>
+      <div id="appeal-list" class="space-y-3 text-xs"></div>
+    </div>
+  </section>
+
+  <!-- AI CHAT -->
+  <section id="tab-chat" class="tab-content hidden space-y-3">
+    <div class="glass-card p-4 rounded-3xl h-96 overflow-y-auto space-y-3" id="chat-box"></div>
+    <button id="op-suggest" class="hidden btn2 w-full" onclick="chatToOperator()"><i class="fa-solid fa-headset"></i> Operatorga murojaat qilish</button>
+    <div class="flex space-x-2">
+      <input id="chat-input" type="text" placeholder="Savolingizni yozing..." class="inp" onkeydown="if(event.key==='Enter')sendChat()">
+      <button id="chat-send" onclick="sendChat()" class="bg-emerald-500 text-slate-950 px-4 rounded-xl text-xs font-bold"><i class="fa-solid fa-paper-plane"></i></button>
+    </div>
+  </section>
+
+  <!-- PROFIL -->
+  <section id="tab-profile" class="tab-content hidden space-y-4">
+    <div class="glass-card p-5 rounded-3xl space-y-3">
+      <h3 class="text-sm font-bold text-slate-200">Telefon raqam</h3>
+      <div class="flex space-x-2">
+        <input id="phone-input" type="tel" placeholder="+998 90 123 45 67" class="inp">
+        <button class="btn2" onclick="savePhone()">Saqlash</button>
+      </div>
+    </div>
+
+    <div class="glass-card p-5 rounded-3xl">
+      <h3 class="text-sm font-bold text-slate-200 mb-3">Hisoblarim</h3>
+      <div id="acc-list" class="space-y-2 text-xs"></div>
+      <button class="btn mt-4" onclick="showAccountForm()"><i class="fa-solid fa-plus"></i> Hisob qo'shish</button>
+    </div>
+
+    <div id="acc-form" class="glass-card p-5 rounded-3xl space-y-3 hidden">
+      <h3 class="text-sm font-bold text-slate-200">Yangi hisob</h3>
+      <input id="f-number" type="text" inputmode="numeric" placeholder="Shaxsiy hisob raqami" class="inp">
+      <div class="flex space-x-2">
+        <select id="f-label" class="inp">
+          <option>Uy</option><option>Ofis</option><option>Boshqa</option>
+        </select>
+        <select id="f-network" class="inp">
+          <option value="natural">Tabiiy gaz</option>
+          <option value="lpg">Suyultirilgan gaz</option>
+        </select>
+      </div>
+      <input id="f-address" type="text" placeholder="Manzil (tuman, ko'cha, uy)" class="inp">
+      <div id="map"></div>
+      <div class="flex items-center justify-between">
+        <button class="btn2" onclick="locateMe()"><i class="fa-solid fa-location-crosshairs"></i> Joylashuvim</button>
+        <span id="pin-info" class="text-[11px] text-slate-400">Xaritada bosib belgilang</span>
+      </div>
+      <div class="flex space-x-2">
+        <button class="btn2 w-1/3" onclick="hideAccountForm()">Bekor</button>
+        <button id="acc-save" class="btn w-2/3" onclick="saveAccount()">Saqlash</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- To'ldirish oynasi -->
+<div id="topup-modal" class="hidden fixed inset-0 z-[90] bg-black/60 flex items-end">
+  <div class="glass-card w-full rounded-t-3xl p-5 space-y-3" style="background:#0f172a">
+    <h3 class="text-sm font-bold">Hisobni to'ldirish</h3>
+    <div class="grid grid-cols-3 gap-2">
+      <button class="btn2" onclick="setAmount(50000)">50 000</button>
+      <button class="btn2" onclick="setAmount(100000)">100 000</button>
+      <button class="btn2" onclick="setAmount(200000)">200 000</button>
+    </div>
+    <input id="topup-amount" type="number" inputmode="numeric" placeholder="Summa (so'm)" class="inp">
+    <div class="grid grid-cols-2 gap-2">
+      <button id="btn-payme" class="btn" onclick="doTopup('payme')">Payme</button>
+      <button id="btn-click" class="btn" onclick="doTopup('click')">Click</button>
+    </div>
+    <p id="demo-note" class="text-[10px] text-amber-400"></p>
+    <button class="btn2 w-full" onclick="closeTopup()">Yopish</button>
+  </div>
+</div>
+
+<nav class="fixed bottom-0 left-0 right-0 glass-card border-t border-slate-800 px-2 pt-1 flex justify-around items-center z-50" style="padding-bottom:calc(.5rem + env(safe-area-inset-bottom))">
+  <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-btn active-tab flex flex-col items-center space-y-1 pt-1"><i class="fa-solid fa-house text-sm"></i><span class="text-[9px]">Asosiy</span></button>
+  <button onclick="switchTab('meters')" id="nav-meters" class="nav-btn flex flex-col items-center space-y-1 pt-1"><i class="fa-solid fa-gauge-high text-sm"></i><span class="text-[9px]">Hisoblagich</span></button>
+  <button onclick="switchTab('requests')" id="nav-requests" class="nav-btn flex flex-col items-center space-y-1 pt-1"><i class="fa-solid fa-file-pen text-sm"></i><span class="text-[9px]">Arizalar</span></button>
+  <button onclick="switchTab('chat')" id="nav-chat" class="nav-btn flex flex-col items-center space-y-1 pt-1"><i class="fa-solid fa-robot text-sm"></i><span class="text-[9px]">AI Chat</span></button>
+  <button onclick="switchTab('profile')" id="nav-profile" class="nav-btn flex flex-col items-center space-y-1 pt-1"><i class="fa-solid fa-user text-sm"></i><span class="text-[9px]">Profil</span></button>
+</nav>
+
+<script>
+const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+if (tg) { tg.ready(); tg.expand(); try { tg.setHeaderColor('#0f172a'); tg.setBackgroundColor('#020617'); } catch(e){} }
+const haptic = t => { try { tg && tg.HapticFeedback.impactOccurred(t); } catch(e){} };
+
+const S = { me:null, accounts:[], cur:null, dash:null, chatLoaded:false, lastQuestion:'', map:null, marker:null, pin:null, demo:true };
+
+/* ---------- yordamchi ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money = n => Math.round(Number(n||0)).toLocaleString('ru-RU');
+const fdate = iso => new Date(iso).toLocaleString('uz-UZ',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+const MONTHS = ['Yan','Fev','Mar','Apr','May','Iyn','Iyl','Avg','Sen','Okt','Noy','Dek'];
+
+function toast(msg, ok=false){
+  const t = $('toast'); t.textContent = msg;
+  t.className = 'px-4 py-2 rounded-xl text-xs font-medium shadow-lg ' + (ok ? 'bg-emerald-500 text-slate-950' : 'bg-rose-500 text-white');
+  clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.add('hidden'), 3500);
+}
+
+async function api(path, method='GET', body=null){
+  const headers = {'X-Telegram-Init-Data': tg ? tg.initData : '', 'ngrok-skip-browser-warning':'1'};
+  let payload = null;
+  if (body instanceof FormData) payload = body;
+  else if (body) { headers['Content-Type']='application/json'; payload = JSON.stringify(body); }
+  const res = await fetch('/api/'+path, {method, headers, body: payload});
+  if (res.status === 204) return null;
+  let data = null; try { data = await res.json(); } catch(e){}
+  if (!res.ok) throw new Error((data && data.detail) || 'Xatolik ('+res.status+')');
+  return data;
+}
+
+function photoChosen(inputId, labelId){
+  const f = $(inputId).files[0];
+  $(labelId).textContent = f ? '📎 ' + f.name : '';
+}
+
+/* ---------- navigatsiya ---------- */
+function switchTab(name){
+  haptic('light');
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active-tab'));
+  $('tab-'+name).classList.remove('hidden');
+  const nav = $('nav-'+name); if (nav) nav.classList.add('active-tab');
+  if (name === 'chat') loadChat();
+  if (name === 'requests') loadAppeals();
+  if (name === 'profile') renderProfile();
+  window.scrollTo(0,0);
+}
+
+/* ---------- yuklash ---------- */
+async function init(){
+  try {
+    S.me = await api('me/');
+  } catch(e){
+    $('user-display').textContent = 'Xatolik';
+    toast(tg && tg.initData ? e.message : "Ilovani Telegram ichidan oching", false);
+    return;
+  }
+  S.accounts = S.me.accounts; S.demo = S.me.demo_payments;
+  $('user-display').textContent = S.me.first_name || 'Foydalanuvchi';
+  $('phone-input').value = S.me.phone || '';
+  const saved = Number(localStorage.getItem('curAcc'));
+  S.cur = (S.accounts.find(a => a.id === saved) || S.accounts[0] || {}).id || null;
+  renderSwitcher();
+  if (!S.cur) { switchTab('profile'); showAccountForm(); toast("Boshlash uchun hisob raqamingizni qo'shing", true); return; }
+  await loadDashboard();
+}
+
+function renderSwitcher(){
+  const w = $('acc-switch-wrap');
+  w.classList.toggle('hidden', S.accounts.length < 2);
+  $('acc-switch').innerHTML = S.accounts.map(a => `<option value="${a.id}" ${a.id===S.cur?'selected':''}>${esc(a.label)} · ${esc(a.number)}</option>`).join('');
+}
+
+function selectAccount(id){ S.cur = Number(id); localStorage.setItem('curAcc', id); loadDashboard(); }
+
+async function loadDashboard(){
+  if (!S.cur) return;
+  try { S.dash = await api(`accounts/${S.cur}/dashboard/`); } catch(e){ toast(e.message); return; }
+  const d = S.dash, a = d.account;
+  $('account-num').textContent = a.number;
+  $('network-badge').textContent = a.network === 'lpg' ? 'Suyultirilgan gaz' : 'Tabiiy gaz';
+  $('account-balance').textContent = money(a.balance);
+  $('balance-wrap').className = 'text-3xl font-extrabold my-1 ' + (Number(a.balance) < 0 ? 'text-rose-400' : 'text-emerald-400');
+  $('account-address').textContent = a.address || "Manzil ko'rsatilmagan";
+
+  // diagramma
+  const m = d.monthly, max = Math.max(1, ...m.map(x => x.volume));
+  $('chart').innerHTML = m.map(x => {
+    const mo = MONTHS[Number(x.month.slice(5,7))-1];
+    return `<div class="flex-1 flex flex-col items-center justify-end h-full">
+      <span class="text-[9px] text-slate-400 mb-1">${x.volume}</span>
+      <div class="bar w-full" style="height:${Math.max(3, x.volume/max*70)}%"></div>
+      <span class="text-[9px] text-slate-500 mt-1">${mo}</span></div>`;
+  }).join('');
+  $('chart-empty').classList.toggle('hidden', m.length > 0);
+
+  // operatsiyalar
+  const names = {topup:"To'lov", charge:'Hisoblandi', adjust:'Tuzatish'};
+  $('tx-list').innerHTML = d.transactions.length ? d.transactions.map(t => {
+    const pos = Number(t.amount) > 0;
+    return `<div class="flex justify-between items-center py-2 border-b border-slate-800">
+      <div><div class="text-slate-200">${names[t.kind]||esc(t.kind)}${t.provider ? ' · '+esc(t.provider) : ''}</div>
+      <div class="text-[10px] text-slate-500">${fdate(t.created_at)}</div></div>
+      <b class="${pos?'text-emerald-400':'text-rose-400'}">${pos?'+':''}${money(t.amount)}</b></div>`;
+  }).join('') : '<p class="text-slate-500">Hozircha operatsiya yo\'q</p>';
+
+  // ko'rsatkichlar
+  $('last-reading').textContent = d.last_reading ? `Oxirgi ko'rsatkich: ${d.last_reading.value} ${a.unit} (${fdate(d.last_reading.created_at)})` : "Birinchi kiritilgan ko'rsatkich boshlang'ich nuqta bo'ladi.";
+  $('reading-list').innerHTML = d.readings.length ? d.readings.map(r => `
+    <div class="flex justify-between items-center py-2 border-b border-slate-800">
+      <div><div class="text-slate-200">${r.value} ${esc(a.unit)}</div><div class="text-[10px] text-slate-500">${fdate(r.created_at)}</div></div>
+      <div class="text-right">${Number(r.consumption)>0 ? `<b class="text-emerald-400">+${r.consumption} ${esc(a.unit)}</b>` : ''}
+      ${r.photo ? `<a href="${esc(r.photo)}" target="_blank" class="text-slate-400 ml-2"><i class="fa-solid fa-image"></i></a>` : ''}</div></div>`).join('')
+    : '<p class="text-slate-500">Hozircha yo\'q</p>';
+}
+
+/* ---------- ko'rsatkich ---------- */
+async function submitReading(){
+  const v = $('reading-input').value;
+  if (!v) return toast("Ko'rsatkichni kiriting");
+  const fd = new FormData(); fd.append('account', S.cur); fd.append('value', v);
+  const f = $('reading-photo').files[0]; if (f) fd.append('photo', f);
+  const b = $('reading-send'); b.disabled = true;
+  try {
+    await api('readings/', 'POST', fd);
+    $('reading-input').value=''; $('reading-photo').value=''; $('reading-photo-name').textContent='';
+    toast("Ko'rsatkich qabul qilindi", true); haptic('medium');
+    await loadDashboard();
+  } catch(e){ toast(e.message); } finally { b.disabled = false; }
+}
+
+/* ---------- to'lov ---------- */
+function openTopup(){
+  const real = S.me.payme_enabled;
+  $('btn-payme').classList.toggle('hidden', !(real || S.demo));
+  $('btn-click').classList.toggle('hidden', !S.demo || real);   // Click hali ulanmagan: faqat demo rejimida
+  $('demo-note').textContent = real ? "To'lov Payme sahifasida amalga oshiriladi." : (S.demo ? "DEMO rejim: haqiqiy pul yechilmaydi, faqat tizim sinovi uchun." : "Onlayn to'lov hali ulanmagan.");
+  $('topup-modal').classList.remove('hidden');
+}
+function closeTopup(){ $('topup-modal').classList.add('hidden'); }
+function setAmount(n){ $('topup-amount').value = n; }
+async function doTopup(provider){
+  const amount = $('topup-amount').value;
+  if (!amount) return toast('Summani kiriting');
+  try {
+    const r = await api('topup/','POST',{account:S.cur, amount, provider});
+    closeTopup(); $('topup-amount').value='';
+    if (r.checkout_url) {
+      if (tg && tg.openLink) tg.openLink(r.checkout_url); else window.open(r.checkout_url, '_blank');
+      toast("To'lovdan so'ng ilovaga qayting, balans yangilanadi", true);
+    } else { toast("Hisob to'ldirildi (demo)", true); haptic('medium'); await loadDashboard(); }
+  } catch(e){ toast(e.message); }
+}
+
+/* ---------- murojaat ---------- */
+async function loadAppeals(){
+  try {
+    const items = await api('appeals/');
+    const colors = {new:'bg-sky-500/20 text-sky-300', review:'bg-amber-500/20 text-amber-300', done:'bg-emerald-500/20 text-emerald-300'};
+    $('appeal-list').innerHTML = items.length ? items.map(a => `
+      <div class="border-b border-slate-800 pb-3">
+        <div class="flex justify-between items-start gap-2">
+          <b class="text-slate-200">#${a.id} · ${esc(a.category)}</b>
+          <span class="px-2 py-0.5 rounded-full text-[10px] ${colors[a.status]||''}">${esc(a.status_label)}</span></div>
+        <p class="text-slate-400 mt-1 whitespace-pre-wrap">${esc(a.text)}</p>
+        ${a.photo ? `<a href="${esc(a.photo)}" target="_blank" class="text-[11px] text-slate-400"><i class="fa-solid fa-image"></i> Rasm</a>` : ''}
+        ${a.reply ? `<div class="mt-2 p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-slate-200"><b>Operator:</b> ${esc(a.reply)}</div>` : ''}
+        <div class="text-[10px] text-slate-500 mt-1">${fdate(a.created_at)}</div></div>`).join('')
+      : '<p class="text-slate-500">Hozircha murojaat yo\'q</p>';
+  } catch(e){ toast(e.message); }
+}
+
+async function submitAppeal(){
+  const text = $('appeal-text').value.trim();
+  if (text.length < 5) return toast('Murojaat matnini yozing');
+  const fd = new FormData();
+  fd.append('category', $('appeal-category').value); fd.append('text', text);
+  if (S.cur) fd.append('account', S.cur);
+  const f = $('appeal-photo').files[0]; if (f) fd.append('photo', f);
+  const b = $('appeal-send'); b.disabled = true;
+  try {
+    await api('appeals/','POST',fd);
+    $('appeal-text').value=''; $('appeal-photo').value=''; $('appeal-photo-name').textContent='';
+    toast('Murojaat yuborildi', true); haptic('medium'); loadAppeals();
+  } catch(e){ toast(e.message); } finally { b.disabled = false; }
+}
+
+/* ---------- AI chat ---------- */
+function bubble(role, text){
+  const d = document.createElement('div');
+  d.className = role === 'user'
+    ? 'bg-slate-800 p-3 rounded-2xl max-w-[85%] ml-auto text-xs text-slate-100 whitespace-pre-wrap'
+    : 'bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-2xl max-w-[85%] text-xs text-slate-200 whitespace-pre-wrap';
+  d.textContent = text; $('chat-box').appendChild(d);
+  $('chat-box').scrollTop = $('chat-box').scrollHeight; return d;
+}
+async function loadChat(){
+  if (S.chatLoaded) return; S.chatLoaded = true;
+  $('chat-box').innerHTML = '';
+  bubble('assistant', `Assalomu alaykum, ${S.me ? S.me.first_name : ''}! Men Hududgaz AI yordamchisiman. Balans, ko'rsatkich, to'lov va arizalar bo'yicha so'rang.`);
+  try { (await api('chat/')).forEach(m => bubble(m.role, m.content)); } catch(e){}
+}
+async function sendChat(){
+  const inp = $('chat-input'), text = inp.value.trim(); if (!text) return;
+  inp.value=''; S.lastQuestion = text; bubble('user', text); $('op-suggest').classList.add('hidden');
+  const wait = bubble('assistant','…'); $('chat-send').disabled = true;
+  try {
+    const r = await api('chat/','POST',{message:text, account:S.cur});
+    wait.textContent = r.reply; $('op-suggest').classList.toggle('hidden', !r.suggest_operator);
+  } catch(e){ wait.textContent = 'Xatolik: ' + e.message; }
+  finally { $('chat-send').disabled = false; $('chat-box').scrollTop = $('chat-box').scrollHeight; }
+}
+function chatToOperator(){ $('appeal-text').value = S.lastQuestion; switchTab('requests'); }
+
+/* ---------- profil / hisoblar ---------- */
+function renderProfile(){
+  $('acc-list').innerHTML = S.accounts.length ? S.accounts.map(a => `
+    <div class="flex justify-between items-center py-2 border-b border-slate-800">
+      <div><div class="text-slate-200">${esc(a.label)} · <span class="font-mono">${esc(a.number)}</span></div>
+      <div class="text-[10px] text-slate-500">${esc(a.address || 'Manzil yo\'q')}${a.lat ? ' 📍' : ''}</div></div>
+      <button class="text-rose-400 px-2" onclick="deleteAccount(${a.id})"><i class="fa-solid fa-trash"></i></button></div>`).join('')
+    : '<p class="text-slate-500">Hisob qo\'shilmagan</p>';
+}
+async function savePhone(){
+  try { S.me = await api('me/','PATCH',{phone:$('phone-input').value}); $('phone-input').value = S.me.phone; toast('Telefon saqlandi', true); }
+  catch(e){ toast(e.message); }
+}
+async function deleteAccount(id){
+  const ok = tg && tg.showConfirm ? await new Promise(r => tg.showConfirm("Hisobni o'chirasizmi? Barcha ma'lumotlari ham o'chadi.", r)) : confirm("Hisobni o'chirasizmi?");
+  if (!ok) return;
+  try { await api(`accounts/${id}/`,'DELETE'); await reloadAccounts(); } catch(e){ toast(e.message); }
+}
+async function reloadAccounts(){
+  S.me = await api('me/'); S.accounts = S.me.accounts;
+  if (!S.accounts.find(a => a.id === S.cur)) S.cur = (S.accounts[0]||{}).id || null;
+  renderSwitcher(); renderProfile();
+  if (S.cur) await loadDashboard();
+  else { S.dash = null; $('account-num').textContent='---'; $('account-balance').textContent='0'; }
+}
+
+function showAccountForm(){
+  $('acc-form').classList.remove('hidden');
+  if (!S.map) {
+    S.map = L.map('map').setView([41.3111, 69.2797], 11);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(S.map);
+    S.map.on('click', e => setPin(e.latlng.lat, e.latlng.lng));
+  }
+  setTimeout(() => S.map.invalidateSize(), 150);
+  $('acc-form').scrollIntoView({behavior:'smooth'});
+}
+function hideAccountForm(){ $('acc-form').classList.add('hidden'); }
+function setPin(lat, lng){
+  S.pin = {lat, lng};
+  if (S.marker) S.marker.setLatLng([lat,lng]); else S.marker = L.marker([lat,lng]).addTo(S.map);
+  $('pin-info').textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+}
+function locateMe(){
+  if (!navigator.geolocation) return toast('Joylashuv qo\'llab-quvvatlanmaydi');
+  navigator.geolocation.getCurrentPosition(
+    p => { setPin(p.coords.latitude, p.coords.longitude); S.map.setView([p.coords.latitude, p.coords.longitude], 17); },
+    () => toast("Joylashuvga ruxsat berilmadi. Xaritada qo'lda belgilang."), {enableHighAccuracy:true, timeout:10000});
+}
+async function saveAccount(){
+  const number = $('f-number').value.trim();
+  if (!number) return toast('Hisob raqamini kiriting');
+  const b = $('acc-save'); b.disabled = true;
+  try {
+    const acc = await api('accounts/','POST',{
+      number, label:$('f-label').value, network:$('f-network').value, address:$('f-address').value,
+      lat: S.pin ? S.pin.lat : null, lng: S.pin ? S.pin.lng : null });
+    $('f-number').value=''; $('f-address').value=''; S.pin=null; if (S.marker){ S.map.removeLayer(S.marker); S.marker=null; }
+    $('pin-info').textContent='Xaritada bosib belgilang';
+    hideAccountForm(); toast("Hisob qo'shildi", true);
+    S.cur = acc.id; localStorage.setItem('curAcc', acc.id);
+    await reloadAccounts(); switchTab('dashboard');
+  } catch(e){ toast(e.message); } finally { b.disabled = false; }
+}
+
+document.addEventListener('visibilitychange', () => { if (!document.hidden && S.cur) loadDashboard(); });
+init();
+</script>
+</body>
+</html>
